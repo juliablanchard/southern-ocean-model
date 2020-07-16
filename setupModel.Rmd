@@ -1,5 +1,5 @@
 ---
-title: "Example #3: Towards size-based ecosystem models"
+title: "Setting up a Southern Ocean ecosystem model using mizer"
 author: Julia L. Blanchard
 date: Feb, 5, 2020
 place: Horbart
@@ -11,10 +11,9 @@ output:
 
 # Introduction
 
-In this section of the workshop we will continue exploring how we can learn about models ecological models and data using the "mizer" R package. Here, we will push the boundaries of the theory by introducing species that may not necessarily fit within  the conceptualisaion of the trait-based and size spectrum models. To do so we will think about how different assumptions would need to change to accomodate species beyond fish- such as large baleen whales, seabirds and other species.
+Here, we will push the boundaries of size spectrum theory by introducing species that may not necessarily fit within  the conceptualisaion of the trait-based and size spectrum models. To do so we will think about how different assumptions would need to change to accomodate species beyond fish- such as large baleen whales, seabirds and other species.
 
-To begin with we will use the scaling model - which assumes eggs sizes are notthe same and might be a good representation of a background zooplankton + fish community.
-
+To begin with we will read in some data for predators in the Kerguelen regions of the Southern Ocean.
 
 ```{r}
 #get required packages
