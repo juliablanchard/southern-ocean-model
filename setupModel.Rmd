@@ -43,7 +43,7 @@ dat<-read.csv("data/pred_group_biomasses.csv",header=T)
 #groups<-readRDS("data/groups.RDS")
 #write.csv(groups,"data/groups.csv")
 
-read.csv("data/groups.csv")
+groups <-read.csv("data/groups2.csv")
 groups<-merge(groups,dat,by.x="species",by.y="group",all=T)
 
 #have a look at plot
