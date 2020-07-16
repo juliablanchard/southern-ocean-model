@@ -31,7 +31,7 @@ library(mizerExperimental)
 
 ```
 
-
+### Data
 Let's read in some biomasses of predators in the Southern Ocean.
 
 ```{r}
@@ -54,12 +54,12 @@ text(groups$w_inf,groups$biomass.tperkm2,labels=groups$species,cex=0.5)
 ```
 
 
-## Multispecies (functional group) Southern Ocean Model
+## Set-up mizer model
 
 Next let's read in the parameters we've put together for a Southern Ocean (Prydz Bay) ecosystem.
 
 ```{r}
-#read groups for southern ocean model
+#read groups again for southern ocean model, this time subsetting key groups
 groups<-read.csv("data/groups2.csv")[-1,]
 
 #groups <- readRDS("data/groups.RDS")[-1,]
@@ -124,17 +124,18 @@ mf.params@species_params$R_max <- 10*mf.params@species_params$R_max
 # mf.params@species_params$w_mat[10:12] <- 0.75*mf.params@species_params$w_inf[10:12]
 # setParams(mf.params)
 
-mf.params<- setParams(mf.params,kappa=1e8)
+mf.params<- setParams(mf.params,kappa=1e5) # take the new paramewters and change kappa
 
 
 sim <- project(mf.params, t_max=500,dt = 0.1)
 plot(sim)
-getFeedingLevel(sim)
 #plotlyGrowthCurves(sim,species="macrozooplankton")
 plotlyFeedingLevel(sim)
+# feeding level satioation for some groups, except for the seabirds
 # macrozooplankton - they are not growing enough,why?
 #tuneParams(mf.params)
 plotlyGrowthCurves(sim,percentage = T)
+plotlySpectra(sim)
 ```
 
 If we combine the biomassess from the model and add the data to  plot we cna look at how close/far we are.
@@ -184,8 +185,9 @@ plotBioData(sim,dat)
  
 # changes need to maturation sizes - zoop groups -> wmat 50% of winf
 ```
-
-Let's change some of the parameters which make some of these groups less fishy! The feeidng kernel in teh above model is set up for fish. Here we use the model of Heneghan to describe a more planktivours feeding kernel form zooplankton and baleen whales.
+# Model Assumptions
+### Feeding kernels
+Let's change some of the parameters which make some of these groups less fishy! The feeding kernel in teh above model is set up for fish. Here we use the model of Heneghan to describe a more planktivours feeding kernel form zooplankton and baleen whales.
 ```{r}
 
 ####### feeding kernels - use box kernels for planktovores instead?
@@ -282,14 +284,43 @@ plotBioData(new.mf,dat)
 
 That helps baleen whales - and impact macrozoooplankton, but some of the predator groups are still not getting enough food.
 
-Next we could use Gustav's RShiny "tuner" to explore the params by  hand to epxlore why this is the case...
-```{r}
-#tuneParams(params)
-```
+### Maturation and reproduction
 
-####### Calibration #######
+We need to check the assumptions about maturation and reproduction for the non-fish groups.
 
-Rather than manually tune the parameters we will try to automatically calibrate the model with data and estimate our uncertain parameters. We are particularly uncertian about: kappa ( the satellite data used as  inputs does not appear to be enough to keep the zooplankton  grooups alive), Rmax( this will influence the biomass of each group) Here, we will use an inverse calibraion where we have population level biomass density data for 6 of the marine mammal and seabird groups (obtained from the inputs for an EcoPath model). 
+The marine mammals and seabirds show stop growth once they reach matruation size. Need to make sure some functioanl groups are not mixtures of these type of taxa. Therefore matruation size and asymptotic size are very close. They should probably alos follow a sharp transition to maturation size, as they follow determinate growth.
+
+Density dependence: Erepro, Rmax.
+
+Should we change the reprodcution function? There are other options now:
+
+### Starvation mortality
+
+Should we include startvation morality ? This would free up competition for resources....
+
+### Metabolic costs
+
+Are these correct for the different groups?
+
+### Other sources of mortality
+
+Currently assumong a fairly low backgournd "other" moratlity that is constant within fucntioan group but declines with aymptotic size (Brown et al. 2004). Sensescence mortality has been used in other work, but is tricky to parameterise. Though this might be needed for squid or other life histories that dies after reproduction.
+
+### Plankton dynamics
+
+Currently we use the default plankton dynamics and parameter values. What should these be for the Southern Ocean? Do we have any information from regional shelf sea biogeochmical models? The previous information of satellite data seem limited. 
+
+So, we decided to ask the question: What does the plankton need to be to feed the rest of the size spectrum (at equlibrium)? Does anyone have size spectrum slopes and intercepts for this system? (Angus Atkinson?)
+
+However, we could also incude stochasticity...more work though example here: https://rpubs.com/gustav/plankton-anchovy
+
+Samik Datta and I have also looked at seasonality - hopefully will build extension, but how important for this?
+
+# Model Calibration 
+
+WARNING: BELOW IS UNFINISHED AND DOES NOT CURRENTLY WORK. SHOULD WE START SIMPLER BASIC CALIBRATION ? I HAVE NOT WORKED OUT  MIKE'S METHOD YET.
+
+Rather than continue to manually adjust and tune the parameters we will try to automatically calibrate the model with data and estimate our uncertain parameters. We are particularly uncertian about: kappa ( the satellite data used as  inputs does not appear to be enough to keep the zooplankton  grooups alive), Rmax( this will influence the biomass of each group) Here, we will use an inverse calibraion where we have population level biomass density data for 6 of the marine mammal and seabird groups (obtained from the inputs for an EcoPath model). 
 
 ```{r}
 # Step 0. Set up function to run model and output the predicted log biomasses
