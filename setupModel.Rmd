@@ -264,15 +264,15 @@ for (i in 1:length(mvals)) {
 Let's take a look now.
 ```{r}
   
-params<- setParams(params, pred_kernel = pred_kern,kappa=1e7)
+params<- setParams(params, pred_kernel = pred_kern,kappa=1e6)
 
+# run again, intialised from the final state above
+new.mf<-project(params,t_max=100,initial_n=sim@n[500,,],initial_n_pp=sim@n_pp[500,])
 
-new.mf<-project(params,t_max=100)
+#plot(new.mf)
 
-plot(new.mf)
-
-
-new.mf<-project(params,t_max=500,initial_n=new.mf@n[100,,],initial_n_pp=new.mf@n_pp[100,])
+# run again for longer, from the final state above
+#new.mf<-project(params,t_max=500,initial_n=new.mf@n[100,,],initial_n_pp=new.mf@n_pp[100,])
    
 plot(new.mf)  
 plotlyFeedingLevel(new.mf)  
@@ -284,23 +284,30 @@ plotBioData(new.mf,dat)
 
 That helps baleen whales - and impact macrozoooplankton, but some of the predator groups are still not getting enough food.
 
+### Prey size selection
+
+What range of values should the seabirds have - should we use a box kernel for those groups? I seem to remember there are distinct size ranges for the different seabirds.
+
+### Metabolic costs
+
+Are these correct for the different groups? What about the maximum intake rate coefficients - h? Do these sclae in the way that is expected for endotherms?
+
 ### Maturation and reproduction
 
 We need to check the assumptions about maturation and reproduction for the non-fish groups.
 
-The marine mammals and seabirds show stop growth once they reach matruation size. Need to make sure some functioanl groups are not mixtures of these type of taxa. Therefore matruation size and asymptotic size are very close. They should probably alos follow a sharp transition to maturation size, as they follow determinate growth.
+The marine mammals and seabirds show stop growth once they reach maturation size. Need to make sure some functioanl groups are not mixtures of these type of taxa. Therefore matruation size and asymptotic size are very close. They should probably alos follow a sharp transition to maturation size, as they follow determinate growth.
 
 Density dependence: Erepro, Rmax.
 
-Should we change the reprodcution function? There are other options now:
+Should we change the reproduction function to not use the stock-recruitmnet assumption? There are other options now:https://sizespectrum.org/mizer/reference/index.html#section-density-dependent-reproduction
+
 
 ### Starvation mortality
 
 Should we include startvation morality ? This would free up competition for resources....
 
-### Metabolic costs
 
-Are these correct for the different groups?
 
 ### Other sources of mortality
 
