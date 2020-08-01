@@ -145,9 +145,9 @@ If we combine the biomassess from the model and add the data to  plot we cna loo
 # get biomass and covert to tonnes per area
 plotBioData <- function (sim,dat){
 simbio<-getBiomass(sim)
-simbio<-data.frame(species=mf.params@species_params$species,w_inf=mf.params@species_params$w_inf,simbio=simbio[100,]/1e6)
+simbio<-data.frame(species=mf.params@species_params$species,w_inf=mf.params@species_params$w_inf,simbio=simbio[100,])
 
-simbio<-as.data.frame(merge(simbio,dat,by="species",all=T))
+simbio<-as.data.frame(merge(simbio,dat,by.x="species",by.y="group",all=T))
 
 #have a look at plot with both modelled total biomass and observed for top predators
 plot(simbio$w_inf,simbio$simbio,xlab="log Maximum Weight [g]", ylab=" log Total Biomass", log="xy",col="grey",
@@ -186,6 +186,8 @@ plotBioData(sim,dat)
  
 # changes need to maturation sizes - zoop groups -> wmat 50% of winf
 ```
+
+
 # Model Assumptions
 ### Feeding kernels
 Let's change some of the parameters which make some of these groups less fishy! The feeding kernel in teh above model is set up for fish. Here we use the model of Heneghan to describe a more planktivours feeding kernel form zooplankton and baleen whales.
@@ -250,13 +252,13 @@ for (i in 1:length(mvals)) {
 #  
 #  #and erepro - should this decline with Winf or shoudl it just be a very small number 0.005?
 # #should this actually be closer to 1 for mammals?
-# params@species_params$erepro <-0.05*params@species_params$w_inf^(-0.75)
+params@species_params$erepro <-0.05*params@species_params$w_inf^(-0.75)
 # # need to think about how this sounds in writing
 # 
 # ######### juvenile mortality
 # 
 # ## add declining intraspecific juvenile mortality to background mortality 
-# for (i in 1: length(params@species_params$species)) params@mu_b[i,] <- params@mu_b[i,]  + 0.1*params@w^-0.25
+ for (i in 1: length(params@species_params$species)) params@mu_b[i,] <- params@mu_b[i,]  + 0.1*params@w^-0.25
 # 
 
 
@@ -265,7 +267,7 @@ for (i in 1:length(mvals)) {
 Let's take a look now.
 ```{r}
   
-params<- setParams(params, pred_kernel = pred_kern,kappa=1e6)
+params<- setParams(params, pred_kernel = pred_kern,kappa=1e4)
 
 # run again, intialised from the final state above
 new.mf<-project(params,t_max=100,initial_n=sim@n[100,,],initial_n_pp=sim@n_pp[100,])
@@ -290,12 +292,12 @@ Let's follow the protocol in "toyexample1" and tune kappa to see if we can achiv
 
 ```{r}
 library(shiny)
-sim <- new.mf
+#sim <- new.mf
 runApp("data/shiny-equilibrium")
 # is there a way to save the final chosen values?
 ```
 
-```
+
 
 ### Prey size selection
 
@@ -341,7 +343,7 @@ However, we could also incude stochasticity...more work though example here: htt
 
 Samik Datta and I have also looked at seasonality - hopefully will build extension, but how important for this?
 
-# Simple Model Calibration 
+# Simple Model Calibration
 
 Note:"toyexample1" for more  info on this method.
 
@@ -351,8 +353,8 @@ This might take AWHILE. Go watch some Netflix.
 
 ```{r}
 # change kappa and erepro based on shiny exploration
-  params@species_params$erepro[] <-10^-4
-  params <- setParams(params,kappa=10^6.3)
+#  params@species_params$erepro[] <-10^-4
+params <- setParams(params,kappa=10^4)
   
 # subset row for these species only:
 subset<- c("flying.birds","small.divers","medium.divers","apex.predators","large.divers","baleen.whales")
@@ -365,30 +367,31 @@ ind<-which(params@species_params$species %in%  subset ==T)
 vary<-log10(params@species_params$R_max)[ind] 
 
 #my magic equation:
-#vary <- log10(1000*params@resource_params$kappa*params@species_params$w_inf^-1) 
+vary <- log10(1000*params@resource_params$kappa*params@species_params$w_inf^-0.75)[ind]
 # or use completley made up values, same for each species test for effects of initial values
 
 #groups<-groups[groups$species %in%  subset,]
 
 #the following getError function returns the least sum of squared errors between the observations and model estimates
-preddat = dat
+preddat = dat[dat$group %in%  subset,]
 
 getError <- function(vary=vals,params=params,dat=preddat,data_type="biomass",timetorun=100,whichspecies=ind) {
   params@species_params$R_max[whichspecies]<-10^vary
   sim <- project(params, effort = 0, t_max = timetorun, dt=0.1)
           
           ## what kind of data and output do we have?
+         
           if (data_type=="biomass") {
          
-          output <-getBiomass(sim)[timetorun,]   # units here: g. m2
+          output <-getBiomass(sim)[timetorun,]   # units:1 g/m2 = 1 t/km2
           
-          simbio<-data.frame(species=mf.params@species_params$species,w_inf=mf.params@species_params$w_inf,simbio=           output/1e6) # convert units to tperm2
+          simbio<-data.frame(species=mf.params@species_params$species,w_inf=mf.params@species_params$w_inf,simbio=output) 
           
-          simbio<-as.data.frame(merge(simbio,dat,by.x="species",all=T))
+          simbio<-as.data.frame(merge(simbio,dat,by.x="species",by.y="group",all=T))
            
           output <- simbio[!is.na(simbio[,4]),3]
           
-
+          obs<-simbio[!is.na(simbio[,4]),4]
          }
          
           if (data_type=="SSB") {
@@ -396,15 +399,15 @@ getError <- function(vary=vals,params=params,dat=preddat,data_type="biomass",tim
           }
           
           if (data_type=="catch") {
-         output <-getYield(sim)[timetorun,]/1e6 #### CHECK UNITS !! grams per year? the data are in tonnes per year so converting to tonnes.
+         output <-getYield(sim)[timetorun,] #### CHECK UNITS !! grams per year? the data are in tonnes per year so converting to tonnes.
           }
           
   pred <- log(output)
-  dat  <- log(obs)
+  obs  <- log(obs)
 
   # sum of squared errors, here on log-scale of predictions and data (could change this or use other error or likelihood options)
   
-   discrep <- pred - dat
+   discrep <- pred - obs
 
    discrep <- (sum(discrep^2))
   
@@ -421,41 +424,49 @@ getError <- function(vary=vals,params=params,dat=preddat,data_type="biomass",tim
 err<-getError(vary,params, dat = preddat,data_type="biomass")
 #test
 err
+```
 
 
 
+```{r}
 # this time carry out optimisation, using optim(), with pred biomasses only
-vals<-optim(par=vary,getError,params=params,method ="L-BFGS-B",lower=c(rep(3,12)),upper= c(rep(20,12)))
+
+# could estimate erepro instead, and hold R_max constant
+
+vals<-optim(par=vary,getError,params=params,method ="L-BFGS-B",lower=c(rep(1e-2,6)),upper= c(rep(10,6)))
+
+
+#vals<-optim(par=vary,getError,params=params,method ="L-BFGS-B",lower=c(rep(3,12)),upper= c(rep(20,12)))
 
 # plug back into model
 # make sure kappa and erepro are the same
-params@species_params$erepro[] <-1
-params <- setParams(params,kappa=1e5)
+#params@species_params$erepro[] <-1
+
+params <- setParams(params,kappa=1e4)
 # optim values:
-params@species_params$R_max <- 10^vals$par[1:12] 
+params@species_params$R_max[ind] <- 10^vals$par 
 # set the param object
 params<-setParams(params)
 sim <- project(params, effort = 0, t_max = 100, dt=0.1)
 plot(sim)
 
-
 # save vals - may want to repeat this setp depending on diagnostics, after changing some parameters
-saveRDS(vals,"optim_vals2.RDS")
+saveRDS(vals,"optim_vals3.RDS")
 
 # save params - may want to repeat this setp depending on diagnostics, after changing some parameters
-saveRDS(params,"optim_param2.RDS")
-saveRDS(sim,"optim_sim2.RDS")
+saveRDS(params,"optim_param3.RDS")
+saveRDS(sim,"optim_sim3.RDS")
 
 
 ```
 
 
 
-#### Step 4. Check that the physiological recruitment, \RDI, is much higher than the realised recruitment, \RDD. High RDI/RDD ratio.
+#### Step 4. Check that the physiological recruitment, \RDI, is much higher than the realised recruitment, \RDD. High RDI/RDD ratio. NOt sure this holds for no-fish groups though.
 
 ```{r}
-#params<- readRDS("optim_param.RDS")
-#sim <- readRDS("optim_sim.RDS")
+params<- readRDS("optim_param3.RDS")
+sim <- readRDS("optim_sim3.RDS")
 getRDI(params)/getRDD(params)
 
 ```
@@ -469,18 +480,19 @@ Eg. species biomass or abundance distrubtions, feeding level, naturality mortali
 ```{r}
 
 ## check obs vs pred
-pred_bio <-melt(getBiomass(sim)[100,]/1e6)
+pred_bio <-melt(getBiomass(sim)[100,])
 pred_bio$species <- row.names(pred_bio)
-pred_bio<-as.data.frame(merge(pred_bio,preddat,by.x="species",all=T))
+pred_bio<-as.data.frame(merge(pred_bio,preddat,by.x="species",by.y="group",all=T))
            
 p <- ggplot() + # plot predicted and observed yields
-        geom_point(data = pred_bio, 
+        geom_point(data = pred_bio[pred_bio$species %in%  subset,], 
             aes(x = log10(value), y = log10(biomass.tperkm2), color = species)) +
    # plot optimal fit line
         geom_abline(color = "black", slope = 1, intercept = 0) + 
   xlab("log10 Predicted Biomass Density") + 
-  ylab("log10 Observed Biomass Density") #+ 
- # scale_fill_manual(values = wes_palette(12, "Zissou")) 
+  ylab("log10 Observed Biomass Density") +
+  xlim(log10(0.001), log10(2)) +
+  ylim(log10(0.001), log10(2)) 
 p
  
 # check other plots
@@ -490,5 +502,6 @@ plotlyFeedingLevel(sim)
 plotGrowthCurves(sim,"baleen.whales") # check each species 
 plotlySpectra(sim,power=2)
 plotDiet(params,"baleen.whales") 
-
-# What would happen if changed parameters above based on different assumptions? Need to chekc all of these make sense!
+plotBioData(sim,dat)
+# What would happen if changed parameters above based on different assumptions? Need to check all of these in detail to  make sure they sense!
+```
