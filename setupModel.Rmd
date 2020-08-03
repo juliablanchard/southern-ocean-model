@@ -365,7 +365,7 @@ This might take AWHILE. Go watch some Netflix.
 ```{r}
 # change kappa and erepro based on shiny exploration
 #  params@species_params$erepro[] <-10^-4
-params <- setParams(params,kappa=10^7.1)
+params <- setParams(params,kappa=10^5.6)
   
 # subset row for these species only:
 # subset<- c("flying.birds","small.divers","medium.divers","apex.predators","large.divers","baleen.whales")
@@ -375,8 +375,10 @@ params <- setParams(params,kappa=10^7.1)
 # define the initial parameters to send to optimisation code below
 
 # we need initlal values for species Rmaxs, log10 scale
-vary<-log10(params@species_params$R_max)
-vary[12]<-log10(1e5)
+# vary<-log10(params@species_params$R_max)
+# vary[12]<-log10(1e5)
+
+vary<-rep(1e-4,12)
 
 #my magic equation:
 #vary <- log10(1000*params@resource_params$kappa*params@species_params$w_inf^-0.75)
@@ -482,9 +484,9 @@ Eg. species biomass or abundance distrubtions, feeding level, naturality mortali
 
 
 ```{r}
-#sim<-newsim if using results from below
+#sim<-newsim # if using results from optimParallel below
 ## check obs vs pred
-pred_bio <-melt(getBiomass(sim)[100,])
+pred_bio <-melt(getBiomass(sim)[500,])
 pred_bio$species <- row.names(pred_bio)
 pred_bio<-as.data.frame(merge(pred_bio,preddat,by="species",all=T))
            
@@ -544,6 +546,8 @@ This time try again with new kappa value, and optimise on multiple cores using o
 library("parallel")
 library("optimParallel")
 
+vary<-rep(1e-4,12)
+
 
 cl <- parallel::makeCluster(5, setup_timeout = 0.5)
 setDefaultCluster(cl = cl)
@@ -553,19 +557,19 @@ clusterEvalQ(cl, {
   library(optimParallel)
 })
 
-optim_result <-optimParallel(par=vary,getError,params=shinyparams,method   ="L-BFGS-B",lower=c(rep(1e-4,12)),upper= c(rep(6,12)),
+optim_result <-optimParallel(par=vary,getError,params=params,method   ="L-BFGS-B",lower=c(rep(1e-5,12)),upper= c(rep(3,12)),
                             parallel=list(loginfo=TRUE, forward=TRUE))
 
 stopCluster(cl)
 
-saveRDS(optim_result,"optim_result.RDS")
+saveRDS(optim_result,"optim_result2.RDS")
 
 # optim values:
 params@species_params$R_max <- 10^optim_result$par 
 
 
-# set the param object - oh no optimised using kappa 10^7.1
-newparams<-setParams(params,kappa=10^7.1)
+# set the param object 
+newparams<-setParams(params)
 newsim <- project(params, effort = 0, t_max = 100, dt=0.1,initial_n = sim@n[500,,],initial_n_pp = sim@n_pp[500,])
 plot(newsim)
 
@@ -575,9 +579,11 @@ plot(newsim)
 # Biomasses too high except for apex predators
 
 # replace the high Rmaxs with lowest ones:
-params@species_params$R_max <- rep(1e-4,12) 
-newparams<-setParams(params,kappa=10^5.6)
-newsim <- project(params, effort = 0, t_max = 500, dt=0.1,initial_n = sim@n[100,,],initial_n_pp = sim@n_pp[100,])
-plot(newsim)
+# params@species_params$R_max <- 10^rep(1e-4,12) 
+# newparams<-setParams(params,kappa=10^5.6)
+ # newsim <- project(params, effort = 0, t_max = 500, dt=0.1,initial_n = newsim@n[100,,],initial_n_pp = newsim@n_pp[100,])
+# plot(newsim)
+
+# then redo optimParallel
 
 ```
