@@ -17,17 +17,18 @@ To begin with we will read in some data for predators in the Kerguelen regions o
 
 ```{r}
 #get required packages
-#library(devtools)
+library(devtools)
 #most up to date master branch of mizer
 #install_github("sizespectrum/mizer")
 #install_github("astaaudzi/mizer-rewiring", ref = "temp-model-comp")
 #documentation here:
 #https://sizespectrum.org/mizer/dev/index.html
-library(mizer)
-require(tidyverse)
 # 
-# remotes::install_github("sizespectrum/mizerExperimental")
-# library(mizerExperimental)
+#remotes::install_github("sizespectrum/mizerExperimental")
+remotes::install_github("sizespectrum/mizerStarvation")
+library(mizerStarvation)
+library(tidyverse)
+library(ggplot2)
 
 ```
 
@@ -37,14 +38,14 @@ Let's read in some biomasses of predators in the Southern Ocean.
 ```{r}
 
 #read in data for prydz bay
-dat<-read.csv("data/pred_group_biomasses.csv",header=T)
+#dat<-read.csv("data/pred_group_biomasses.csv",header=T)
 
 #read groups for southern ocean model
 #groups<-readRDS("data/groups.RDS")
 #write.csv(groups,"data/groups.csv")
 
 groups <-read.csv("data/groups2.csv")
-groups<-merge(groups,dat,by.x="species",by.y="group",all=T)
+#groups<-merge(groups,dat,by.x="species",by.y="group",all=T)
 
 #have a look at plot
 plot(groups$w_inf,groups$biomass.tperkm2,xlab="log Maximum Weight [g]", ylab=" log Total Biomass", log="xy",col="blue",pch=16)
@@ -83,18 +84,20 @@ We will pass these parameters to mizer to set up a new multispecies model.
 
 ```{r}
  
-mf.params <- newMultispeciesParams(species_params=groups,interaction=theta,kappa = 1e3,min_w_pp = 1e-16,w_pp_cutoff = 1,r_pp = 10,z0pre = 0.01)
+mf.params <- newMultispeciesParams(species_params=groups,interaction=theta,kappa = 1e4,min_w_pp = 1e-16,w_pp_cutoff = 1,r_pp = 10,z0pre = 0.01)
 
 # mf.params@species_params$metab[1] <-0.01
 mf.params@species_params$h[] <- 10*mf.params@species_params$ks[] 
 
 # mf.params@species_params$gamma[1] <- 1000*(mf.params@species_params$gamma[1])
-mf.params@species_params$alpha[] <- 0.6
+# mf.params@species_params$alpha[] <- 0.6
 #mf.params@species_params$z0[1] <- 0.01
 
 #higher mean betas
  mf.params@species_params$beta[mf.params@species_params$species == "large.divers"] <-6000
  mf.params@species_params$beta[mf.params@species_params$species == "apex.predators"] <-1000
+  mf.params@species_params$beta[mf.params@species_params$species == "baleen.whales"] <-1e6
+ 
 # # wider feeding kernels
  mf.params@species_params$sigma[] <- 2
  mf.params@species_params$sigma[mf.params@species_params$species == "baleen.whales"] <- 4
@@ -110,7 +113,7 @@ mf.params@species_params$erepro <- ifelse(mf.params@species_params$erepro==1,0.0
 #mf.params@species_params$interaction_p[2:11] <-0.5
 
 # hand tuning to gte in line with data
-mf.params@species_params$R_max <- 10*mf.params@species_params$R_max
+# mf.params@species_params$R_max <- 10*mf.params@species_params$R_max
 #mf.params@species_params$R_max <- log10(1000*params@resource_params$kappa*params@species_params$w_inf^-1) 
 
 
@@ -124,6 +127,8 @@ mf.params@species_params$R_max <- 10*mf.params@species_params$R_max
 # mf.params@species_params$w_mat[mf.params@species_params$species == "medium.divers"] <- 0.75*mf.params@species_params$w_inf[mf.params@species_params$species == "medium.divers"]
 # mf.params@species_params$w_mat[10:12] <- 0.75*mf.params@species_params$w_inf[10:12]
 # setParams(mf.params)
+
+mf.params <- setStarvation(mf.params, 0.1)
 
 mf.params<- setParams(mf.params) # take the new paramewters and change kappa
 
@@ -143,11 +148,11 @@ If we combine the biomassess from the model and add the data to  plot we cna loo
 
 ```{r}
 # get biomass and covert to tonnes per area
-plotBioData <- function (sim,dat){
+plotBioData <- function (sim,dat=groups[,c("species","biomass.tperkm2")]){
 simbio<-getBiomass(sim)
 simbio<-data.frame(species=mf.params@species_params$species,w_inf=mf.params@species_params$w_inf,simbio=simbio[100,])
 
-simbio<-as.data.frame(merge(simbio,dat,by.x="species",by.y="group",all=T))
+simbio<-as.data.frame(merge(simbio,dat,by="species",all=T))
 
 #have a look at plot with both modelled total biomass and observed for top predators
 plot(simbio$w_inf,simbio$simbio,xlab="log Maximum Weight [g]", ylab=" log Total Biomass", log="xy",col="grey",
@@ -252,30 +257,36 @@ for (i in 1:length(mvals)) {
 #  
 #  #and erepro - should this decline with Winf or shoudl it just be a very small number 0.005?
 # #should this actually be closer to 1 for mammals?
-params@species_params$erepro <-0.05*params@species_params$w_inf^(-0.75)
+
+params@species_params$erepro <-0.05*params@species_params$w_inf^(-1)
 # # need to think about how this sounds in writing
-# 
+
+params@species_params$R_max[] <- 1000*params@resource_params$kappa*params@species_params$w_inf^(-2)
 # ######### juvenile mortality
 # 
-# ## add declining intraspecific juvenile mortality to background mortality 
- for (i in 1: length(params@species_params$species)) params@mu_b[i,] <- params@mu_b[i,]  + 0.1*params@w^-0.25
-# 
+# # ## add declining intraspecific juvenile mortality to background mortality 
+params@species_params$R_max[12] <- Inf
+
+  for (i in 1: length(params@species_params$species)) params@mu_b[i,] <- params@mu_b[i,]  + 0.1*params@w^-0.25
+# # 
 
 
 ```
 
 Let's take a look now.
 ```{r}
+params@species_params$erepro[12] <-0.5 # prevents baleen.whales from collapse
+params <- setStarvation(params,0.1)
   
-params<- setParams(params, pred_kernel = pred_kern,kappa=1e4)
+params<- setParams(params, pred_kernel = pred_kern,kappa=10^7.3)
 
 # run again, intialised from the final state above
-new.mf<-project(params,t_max=100,initial_n=sim@n[100,,],initial_n_pp=sim@n_pp[100,])
+new.mf<-project(params,effort=0,t_max=200)
 
 #plot(new.mf)
 
 # run again for longer, from the final state above
-#new.mf<-project(params,t_max=500,initial_n=new.mf@n[100,,],initial_n_pp=new.mf@n_pp[100,])
+new.mf<-project(params,t_max=200,initial_n=new.mf@n[200,,],initial_n_pp=new.mf@n_pp[200,])
    
 plot(new.mf)  
 plotlyFeedingLevel(new.mf)  
@@ -354,30 +365,31 @@ This might take AWHILE. Go watch some Netflix.
 ```{r}
 # change kappa and erepro based on shiny exploration
 #  params@species_params$erepro[] <-10^-4
-params <- setParams(params,kappa=10^4)
+params <- setParams(params,kappa=10^7.1)
   
 # subset row for these species only:
-subset<- c("flying.birds","small.divers","medium.divers","apex.predators","large.divers","baleen.whales")
-
-ind<-which(params@species_params$species %in%  subset ==T)
+# subset<- c("flying.birds","small.divers","medium.divers","apex.predators","large.divers","baleen.whales")
+# 
+# ind<-which(params@species_params$species %in%  subset ==T)
 
 # define the initial parameters to send to optimisation code below
 
 # we need initlal values for species Rmaxs, log10 scale
-vary<-log10(params@species_params$R_max)[ind] 
+vary<-log10(params@species_params$R_max)
+vary[12]<-log10(1e5)
 
 #my magic equation:
-vary <- log10(1000*params@resource_params$kappa*params@species_params$w_inf^-0.75)[ind]
+#vary <- log10(1000*params@resource_params$kappa*params@species_params$w_inf^-0.75)
 # or use completley made up values, same for each species test for effects of initial values
 
 #groups<-groups[groups$species %in%  subset,]
 
 #the following getError function returns the least sum of squared errors between the observations and model estimates
-preddat = dat[dat$group %in%  subset,]
+preddat = groups[,c("species","biomass.tperkm2")]
 
-getError <- function(vary=vals,params=params,dat=preddat,data_type="biomass",timetorun=100,whichspecies=ind) {
-  params@species_params$R_max[whichspecies]<-10^vary
-  sim <- project(params, effort = 0, t_max = timetorun, dt=0.1)
+getError <- function(vary=vals,params=params,dat=preddat,data_type="biomass",timetorun=100,initsim_n=sim@n[500,,],initsim_npp=sim@n_pp[500,]) {
+  params@species_params$R_max<-10^vary
+  sim <- project(params, effort = 0, t_max = timetorun, dt=0.1,initial_n = initsim_n ,initial_n_pp = initsim_npp)
           
           ## what kind of data and output do we have?
          
@@ -387,7 +399,7 @@ getError <- function(vary=vals,params=params,dat=preddat,data_type="biomass",tim
           
           simbio<-data.frame(species=mf.params@species_params$species,w_inf=mf.params@species_params$w_inf,simbio=output) 
           
-          simbio<-as.data.frame(merge(simbio,dat,by.x="species",by.y="group",all=T))
+          simbio<-as.data.frame(merge(simbio,dat,by.x="species",all=T))
            
           output <- simbio[!is.na(simbio[,4]),3]
           
@@ -412,8 +424,9 @@ getError <- function(vary=vals,params=params,dat=preddat,data_type="biomass",tim
    discrep <- (sum(discrep^2))
   
   # can use a strong penalty on the error to ensure we reach a minimum of 10% of the data (biomass or catch) for each species
- #  if(any(pred < 0.1*dat)) discrep <- discrep + 1e10
-  
+   # if(any(pred < dat - 0.2*dat)) discrep <- discrep + 1e10
+   # if(any(pred > dat + 0.2*dat)) discrep <- discrep + 1e10
+   # 
     return(discrep)
 
    }
@@ -433,75 +446,138 @@ err
 
 # could estimate erepro instead, and hold R_max constant
 
-vals<-optim(par=vary,getError,params=params,method ="L-BFGS-B",lower=c(rep(1e-2,6)),upper= c(rep(10,6)))
-
+vals<-optim(par=vary,getError,params=params,method ="L-BFGS-B",lower=c(rep(1e-2,12)),upper= c(rep(7,12)))
 
 #vals<-optim(par=vary,getError,params=params,method ="L-BFGS-B",lower=c(rep(3,12)),upper= c(rep(20,12)))
 
-# plug back into model
-# make sure kappa and erepro are the same
-#params@species_params$erepro[] <-1
-
-params <- setParams(params,kappa=1e4)
 # optim values:
-params@species_params$R_max[ind] <- 10^vals$par 
+params@species_params$R_max <- 10^vals$par 
 # set the param object
 params<-setParams(params)
-sim <- project(params, effort = 0, t_max = 100, dt=0.1)
+sim <- project(params, effort = 0, t_max = 500, dt=0.1)
 plot(sim)
 
+
 # save vals - may want to repeat this setp depending on diagnostics, after changing some parameters
-saveRDS(vals,"optim_vals3.RDS")
+saveRDS(vals,"optim_vals4.RDS")
 
 # save params - may want to repeat this setp depending on diagnostics, after changing some parameters
-saveRDS(params,"optim_param3.RDS")
-saveRDS(sim,"optim_sim3.RDS")
-
+saveRDS(params,"optim_param4.RDS")
+saveRDS(sim,"optim_sim4.RDS")
 
 ```
 
-
-
-#### Step 4. Check that the physiological recruitment, \RDI, is much higher than the realised recruitment, \RDD. High RDI/RDD ratio. NOt sure this holds for no-fish groups though.
+#### Check level of density-dependent recruitment. The physiological recruitment, \RDI, is much higher than the realised recruitment, \RDD. Not sure this "rule" holds for no-fish groups though.
 
 ```{r}
-params<- readRDS("optim_param3.RDS")
-sim <- readRDS("optim_sim3.RDS")
-getRDI(params)/getRDD(params)
-
+params<- readRDS("optim_param4.RDS")
+sim <- readRDS("optim_sim4.RDS")
+getRDI(params,sim@n[500,,],sim@n_pp[500,])/getRDD(params,sim@n[500,,],sim@n_pp[500,])
 ```
 
 
-#### Step 5. Verify the model after the above step by comparing the model with data. 
+#### Verify the model after the above step by comparing the model with data. 
 
 Eg. species biomass or abundance distrubtions, feeding level, naturality mortality, growth, vulnerablity to fishing (fmsy) and catch, diet composition.. Many handy functions for plotting these are available here: https://sizespectrum.org/mizer/reference/index.html
 
 
 ```{r}
-
+#sim<-newsim if using results from below
 ## check obs vs pred
 pred_bio <-melt(getBiomass(sim)[100,])
 pred_bio$species <- row.names(pred_bio)
-pred_bio<-as.data.frame(merge(pred_bio,preddat,by.x="species",by.y="group",all=T))
+pred_bio<-as.data.frame(merge(pred_bio,preddat,by="species",all=T))
            
 p <- ggplot() + # plot predicted and observed yields
-        geom_point(data = pred_bio[pred_bio$species %in%  subset,], 
+        geom_point(data = pred_bio, 
             aes(x = log10(value), y = log10(biomass.tperkm2), color = species)) +
    # plot optimal fit line
         geom_abline(color = "black", slope = 1, intercept = 0) + 
   xlab("log10 Predicted Biomass Density") + 
   ylab("log10 Observed Biomass Density") +
-  xlim(log10(0.001), log10(2)) +
-  ylim(log10(0.001), log10(2)) 
+  xlim(log10(1e-4), log10(1e7)) +
+  ylim(log10(1e-4), log10(1e7)) 
 p
  
+## pretty bad fit! but all groups coexist
+
+
 # check other plots
 
 plotlyGrowthCurves(sim,percentage = T) 
-plotlyFeedingLevel(sim) 
-plotGrowthCurves(sim,"baleen.whales") # check each species 
-plotlySpectra(sim,power=2)
-plotDiet(params,"baleen.whales") 
-plotBioData(sim,dat)
+plotlyFeedingLevel(sim)  # feeding level too high for most - work out why not for apex predators
+plotGrowthCurves(sim,"baleen.whales") # check each species, whlaes grow too fast 
+plotlySpectra(sim,power=2) # kappa too high
+plotDiet(params,"baleen.whales")  # they eat what they are supposed to
+plotBioData(sim,dat) # biomass for all groups way too high
+
+
 # What would happen if changed parameters above based on different assumptions? Need to check all of these in detail to  make sure they sense!
+```
+
+
+```{r}
+library(shiny)
+#look at this model and adjust kappa
+runApp("data/shiny-equilibrium")
+# is there a way to save the final chosen values?
+#try kappa = 10^5.6
+
+
+# set the param object, run for longer to check
+shinyparams<-params
+#shinyparams@species_params$erepro <- 10*params@species_params$erepro
+shinyparams<-setParams(shinyparams,kappa=10^5.6)
+shinysim <- project(shinyparams, effort = 0, t_max = 100, dt=0.1)
+plot(shinysim)
+
+```
+
+
+#### Re-do Optimisation 
+
+This time try again with new kappa value, and optimise on multiple cores using optimParallel.
+
+```{r}
+
+
+library("parallel")
+library("optimParallel")
+
+
+cl <- parallel::makeCluster(5, setup_timeout = 0.5)
+setDefaultCluster(cl = cl)
+clusterExport(cl, as.list(ls()))
+clusterEvalQ(cl, {
+  library(mizerStarvation)
+  library(optimParallel)
+})
+
+optim_result <-optimParallel(par=vary,getError,params=shinyparams,method   ="L-BFGS-B",lower=c(rep(1e-4,12)),upper= c(rep(6,12)),
+                            parallel=list(loginfo=TRUE, forward=TRUE))
+
+stopCluster(cl)
+
+saveRDS(optim_result,"optim_result.RDS")
+
+# optim values:
+params@species_params$R_max <- 10^optim_result$par 
+
+
+# set the param object - oh no optimised using kappa 10^7.1
+newparams<-setParams(params,kappa=10^7.1)
+newsim <- project(params, effort = 0, t_max = 100, dt=0.1,initial_n = sim@n[500,,],initial_n_pp = sim@n_pp[500,])
+plot(newsim)
+
+
+## Then go back to Verification step to check plots and diagnostics
+
+# Biomasses too high except for apex predators
+
+# replace the high Rmaxs with lowest ones:
+params@species_params$R_max <- rep(1e-4,12) 
+newparams<-setParams(params,kappa=10^5.6)
+newsim <- project(params, effort = 0, t_max = 500, dt=0.1,initial_n = sim@n[100,,],initial_n_pp = sim@n_pp[100,])
+plot(newsim)
+
 ```
